@@ -13,4 +13,7 @@ frontend/build/
 
 # OS junk
 .DS_Store
-Thumbs.db
+Thumbs.db]
+
+# virtual environment
+venv/
