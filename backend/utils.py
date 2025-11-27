@@ -10,36 +10,17 @@ import pytz
 def get_indian_datetime():
     ist = pytz.timezone("Asia/Kolkata")
     now = datetime.now(ist)
-    return now.strftime("%d-%m-%Y %I:%M %p") 
+    return now.strftime("%d-%m-%Y %I:%M %p")    
 
 
 
-def remove_pdf_whitespace(input_pdf_path: str, output_pdf_path: str = "full.pdf", dpi: int = 150):
-    """
-    Removes white space around content for each page of the PDF.
-    Saves a trimmed PDF.
+def remove_pdf_whitespace(doc: fitz.Document, dpi: int = 150):
+    scale = dpi / 72
+    out = fitz.open()
 
-    Args:
-        input_pdf_path: path to input PDF
-        output_pdf_path: path to save trimmed PDF
-        dpi: rendering DPI (higher = better quality)
-    """
+    for pno in range(len(doc)):
+        page = doc[pno]
 
-    input_pdf = Path(input_pdf_path)
-    output_pdf = Path(output_pdf_path)
-
-    if not input_pdf.exists():
-        raise FileNotFoundError(f"File not found: {input_pdf}")
-
-    scale = dpi / 72.0  # PDF points -> pixels
-
-    src = fitz.open(str(input_pdf))
-    out = fitz.open()  # new PDF
-
-    for pno in range(len(src)):
-        page = src[pno]
-
-        # Detect content bounding box using words first
         words = page.get_text("words")
         if words:
             x0 = min(w[0] for w in words)
@@ -48,45 +29,32 @@ def remove_pdf_whitespace(input_pdf_path: str, output_pdf_path: str = "full.pdf"
             y1 = max(w[3] for w in words)
             bbox = fitz.Rect(x0, y0, x1, y1)
         else:
-            # fallback: detect using text blocks
             blocks = page.get_text("dict").get("blocks", [])
             rects = [fitz.Rect(b["bbox"]) for b in blocks]
             bbox = sum(rects, rects[0]) if rects else page.rect
-        
-        # Add small margin to avoid cutting edges
+
         margin = 4
-        page_rect = page.rect
         clip = fitz.Rect(
-            max(page_rect.x0, bbox.x0 - margin),
-            max(page_rect.y0, bbox.y0 - margin),
-            min(page_rect.x1, bbox.x1 + margin),
-            min(page_rect.y1, bbox.y1 + margin),
+            bbox.x0 - margin,
+            bbox.y0 - margin,
+            bbox.x1 + margin,
+            bbox.y1 + margin
         )
 
-        # Render only the clipped area
         mat = fitz.Matrix(scale, scale)
-        pix = page.get_pixmap(matrix=mat, clip=clip, alpha=False)
+        pix = page.get_pixmap(matrix=mat, clip=clip)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-        # Convert image to bytes
         img_bytes = io.BytesIO()
         img.save(img_bytes, format="PNG")
         img_bytes.seek(0)
 
-        # New PDF page with same clip size
         new_page = out.new_page(width=clip.width, height=clip.height)
-        new_page.insert_image(
-            fitz.Rect(0, 0, clip.width, clip.height),
-            stream=img_bytes.read()
-        )
+        new_page.insert_image(fitz.Rect(0, 0, clip.width, clip.height),
+                              stream=img_bytes.read())
 
-    out.save(str(output_pdf))
-    out.close()
-    src.close()
-
-    return str(output_pdf)
-
-remove_pdf_whitespace("white.pdf")
+    return out
+# remove_pdf_whitespace("white.pdf")
 
 
 def merge_pdfs(input_pdf_list: List[str], output_pdf_path: str = "merged.pdf") -> str:
@@ -126,11 +94,10 @@ def merge_pdfs(input_pdf_list: List[str], output_pdf_path: str = "merged.pdf") -
     return output_pdf_path
 
 
-merge_pdfs([
-    "white.pdf",
-    "d-21.pdf",
-    "g-21.pdf"
-])
+# merge_pdfs([
+#     "white.pdf",
+#     "full.pdf",
+# ])
 
 
 def print_datetime_on_label(input_pdf: str, output_pdf: str = "final_with_datetime.pdf",
@@ -157,8 +124,23 @@ def print_datetime_on_label(input_pdf: str, output_pdf: str = "final_with_dateti
     doc.close()
     return output_pdf
 
-print_datetime_on_label("white.pdf")
+# print_datetime_on_label("white.pdf")
 
 
 
 
+# PDF Processor Utility Functions
+
+def process_pdf(input_pdf ,settings):
+    original = fitz.open(stream=input_pdf, filetype="pdf")
+    final_doc = fitz.open()
+
+    page = None
+    if settings['remove_white']:
+        page = remove_pdf_whitespace(original)
+
+        final_doc.insert_pdf(page)
+    else:
+        final_doc.insert_pdf(original)
+    print("1")
+    return final_doc
