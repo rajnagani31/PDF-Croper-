@@ -3,14 +3,21 @@ import fitz
 
 # PDF Processor Utility Functions
 
-def process_pdf(input_pdf ,settings):
+def process_pdf(input_pdf ,filter):
     original = fitz.open(stream=input_pdf, filetype="pdf")
     final_doc = fitz.open()
 
     page = None
-    if settings['remove_white']:
+    if filter['remove_white']:
+        page = remove_pdf_whitespace(original)
+    
+    if filter['print_datetime']:
+        now = get_indian_datetime()
+
+    if filter['remove_white']:
         page = remove_pdf_whitespace(original)
 
+        
         final_doc.insert_pdf(page)
     else:
         final_doc.insert_pdf(original)

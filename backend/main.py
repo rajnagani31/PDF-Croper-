@@ -22,12 +22,14 @@ async def crop_pdf_editor(
     files: list[UploadFile] = File(...),
     merge: bool = Form(False),
     remove_white: bool = Form(False),
-    print_datetime: bool = Form(False)
+    print_datetime: bool = Form(False),
+    keep_invoice : bool = Form(False),
 ):
     try:
-        settings = {
+        filter = {
             "remove_white": remove_white,
-            "print_datetime": print_datetime
+            "print_datetime": print_datetime,
+            "keep_invoice": keep_invoice
         }
 
         # STEP 1: READ ALL PDFs INTO MEMORY
@@ -45,7 +47,7 @@ async def crop_pdf_editor(
         
 
             merged_bytes = BytesIO(merged_doc.tobytes())
-            final_doc = process_pdf(merged_bytes, settings)
+            final_doc = process_pdf(merged_bytes, filter)
 
             return StreamingResponse(
                 BytesIO(final_doc.tobytes()),
@@ -56,7 +58,7 @@ async def crop_pdf_editor(
         """ If merge is False & and User pass one PDF then apply process_pdf() on each PDF and return zip of all processed PDFs"""
         if len(input_pdf) == 1:
             single_bytes = BytesIO(input_pdf[0].tobytes())
-            final_doc = process_pdf(single_bytes, settings)
+            final_doc = process_pdf(single_bytes, filter)
 
             return StreamingResponse(
                 BytesIO(final_doc.tobytes()),
@@ -71,7 +73,7 @@ async def crop_pdf_editor(
 
             for idx, pdf in enumerate(input_pdf):
                 pdf_bytes = BytesIO(pdf.tobytes())
-                processed_doc = process_pdf(pdf_bytes, settings)
+                processed_doc = process_pdf(pdf_bytes, filter)
                 processed_bytes = processed_doc.tobytes()
                 zip_file.writestr(f"processed_{idx + 1}.pdf", processed_bytes)
 

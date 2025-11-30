@@ -124,23 +124,4 @@ def print_datetime_on_label(input_pdf: str, output_pdf: str = "final_with_dateti
     doc.close()
     return output_pdf
 
-# print_datetime_on_label("white.pdf")
 
-
-
-
-# PDF Processor Utility Functions
-
-def process_pdf(input_pdf ,settings):
-    original = fitz.open(stream=input_pdf, filetype="pdf")
-    final_doc = fitz.open()
-
-    page = None
-    if settings['remove_white']:
-        page = remove_pdf_whitespace(original)
-
-        final_doc.insert_pdf(page)
-    else:
-        final_doc.insert_pdf(original)
-    print("1")
-    return final_doc
