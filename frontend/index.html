@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Cropper - Process E-commerce Labels</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f7f9fc 0%, #eef2f8 100%);
+            color: #1a1a1a;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(26, 115, 232, 0.1);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #1a73e8 0%, #4f8dfd 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Title Section */
+        .title-section {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .title-section h1 {
+            font-size: 42px;
+            font-weight: 700;
+            color: #1a73e8;
+            margin-bottom: 10px;
+        }
+
+        .title-section p {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        /* Main Content Layout */
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Drag & Drop Area */
+        .drag-drop-box {
+            border: 2px dashed #1a73e8;
+            border-radius: 16px;
+            padding: 60px 40px;
+            text-align: center;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(26, 115, 232, 0.08);
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .drag-drop-box:hover {
+            border-color: #4f8dfd;
+            background: #f7f9fc;
+            box-shadow: 0 4px 16px rgba(26, 115, 232, 0.15);
+        }
+
+        .drag-drop-box.dragover {
+            border-color: #1a73e8;
+            background: #e8f0fe;
+            box-shadow: 0 8px 24px rgba(26, 115, 232, 0.25);
+        }
+
+        .drag-drop-box.has-files {
+            padding: 30px;
+            min-height: auto;
+        }
+
+        .drag-drop-box.has-files .upload-prompt {
+            display: none;
+        }
+
+        .upload-prompt {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .drag-drop-icon {
+            font-size: 48px;
+            display: block;
+        }
+
+        .drag-drop-text {
+            font-size: 16px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .browse-link {
+            color: #1a73e8;
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .browse-link:hover {
+            text-decoration: underline;
+        }
+
+        .drag-drop-subtext {
+            font-size: 14px;
+            color: #999;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        /* Files Container Inside Box */
+        .files-container {
+            display: none;
+            width: 100%;
+        }
+
+        .files-container.show {
+            display: block;
+        }
+
+        .files-header {
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #f7f9fc;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border-left: 4px solid #1a73e8;
+        }
+
+        .file-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+        }
+
+        .file-icon {
+            font-size: 20px;
+        }
+
+        .file-details {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .file-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .file-size {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .remove-file {
+            background: none;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0;
+            transition: color 0.2s;
+        }
+
+        .remove-file:hover {
+            color: #e74c3c;
+        }
+
+        /* Processed Files Section */
+        .processed-files-section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            display: none;
+            margin-top: 30px;
+        }
+
+        .processed-files-section.show {
+            display: block;
+        }
+
+        .processed-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1a73e8;
+            margin-bottom: 20px;
+        }
+
+        .processed-file {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: #f7f9fc;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border-left: 4px solid #4f8dfd;
+        }
+
+        .processed-file:last-child {
+            margin-bottom: 0;
+        }
+
+        .processed-file-info {
+            flex: 1;
+        }
+
+        .processed-file-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .processed-file-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+            color: #999;
+        }
+
+        .processed-file-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .action-btn {
+            background: none;
+            border: 1px solid #e0e0e0;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .action-btn:hover {
+            background: #1a73e8;
+            color: white;
+            border-color: #1a73e8;
+        }
+
+        /* Right Sidebar */
+        .sidebar {
+            background: white;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .sidebar-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1a73e8;
+            margin-bottom: 24px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+        }
+
+        .checkbox-wrapper input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #1a73e8;
+        }
+
+        .checkbox-label {
+            font-size: 15px;
+            color: #333;
+            font-weight: 500;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .process-button {
+            width: 100%;
+            padding: 14px 24px;
+            background: linear-gradient(135deg, #1a73e8 0%, #4f8dfd 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
+        }
+
+        .process-button:hover:not(:disabled) {
+            box-shadow: 0 6px 20px rgba(26, 115, 232, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .process-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .process-button.loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Toast Notifications */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: white;
+            color: #333;
+            padding: 16px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            display: none;
+            max-width: 400px;
+            border-left: 4px solid #4caf50;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        .toast.error {
+            border-left-color: #e74c3c;
+            color: #c0392b;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: static;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .title-section h1 {
+                font-size: 28px;
+            }
+
+            .drag-drop-box {
+                padding: 30px 20px;
+                min-height: 200px;
+            }
+
+            .drag-drop-icon {
+                font-size: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">PDF Cropper</div>
+            <div></div>
+        </header>
+
+        <!-- Title Section -->
+        <section class="title-section">
+            <h1>Crop E-commerce Label</h1>
+            <p>Upload and crop your PDF labels easily.</p>
+        </section>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Column -->
+            <div class="upload-section">
+                <!-- Drag & Drop Box with Files Inside -->
+                <div class="drag-drop-box" id="dragDropBox">
+                    <!-- Upload prompt shown when no files selected -->
+                    <div class="upload-prompt">
+                        <span class="drag-drop-icon">☁️</span>
+                        <div class="drag-drop-text">Drag & Drop your files or <span class="browse-link">Browse</span></div>
+                        <div class="drag-drop-subtext">Supported: PDF files</div>
+                    </div>
+
+                    <!-- Files container displayed inside drag-drop box when files are selected -->
+                    <div class="files-container" id="filesContainer">
+                        <div class="files-header">Uploaded Files</div>
+                        <div id="filesList"></div>
+                    </div>
+                </div>
+
+                <input type="file" id="fileInput" multiple accept=".pdf" />
+
+                <!-- Processed Files Section -->
+                <div class="processed-files-section" id="processedFilesSection">
+                    <!-- Removed "In last 30 minutes" badge -->
+                    <div class="processed-title">Proceed Files</div>
+                    <div id="processedFilesList"></div>
+                </div>
+            </div>
+
+            <!-- Right Sidebar - Settings -->
+            <aside class="sidebar">
+                <div class="sidebar-title">Settings</div>
+                
+                <div class="checkbox-group">
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="sortBySoldBy" id="sortBySoldBy">
+                        <span class="checkbox-label">Sort by <strong>Sold By</strong></span>
+                    </label>
+
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="sortCourierWise" id="sortCourierWise">
+                        <span class="checkbox-label">Sort Courier wise</span>
+                    </label>
+
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="keepInvoice" id="keepInvoice" checked>
+                        <span class="checkbox-label">Keep Invoice</span>
+                    </label>
+
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="keepInvoiceNoCrop" id="keepInvoiceNoCrop">
+                        <span class="checkbox-label">Keep Invoice (No Crop)</span>
+                    </label>
+
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="removeWhiteSpace" id="removeWhiteSpace">
+                        <span class="checkbox-label">Keep Invoice (Remove White space: fit for 4x4 label)</span>
+                    </label>
+
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="treatValmo" id="treatValmo">
+                        <span class="checkbox-label">Treat valmoexpress same as valmo.</span>
+                    </label>
+
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="mergeFiles" id="mergeFiles">
+                        <span class="checkbox-label">Merge Files</span>
+                    </label>
+
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="printDateTime" id="printDateTime">
+                        <span class="checkbox-label">Print Date time on label</span>
+                    </label>
+
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="multiOrderAtBottom" id="multiOrderAtBottom">
+                        <span class="checkbox-label">Multi order at bottom</span>
+                    </label>
+                </div>
+
+                <button class="process-button" id="processButton" disabled>Process PDF</button>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // Configuration
+        const API_URL = 'http://localhost:8000/crop-pdf';
+        const dragDropBox = document.getElementById('dragDropBox');
+        const fileInput = document.getElementById('fileInput');
+        const filesContainer = document.getElementById('filesContainer');
+        const filesList = document.getElementById('filesList');
+        const processButton = document.getElementById('processButton');
+        const toast = document.getElementById('toast');
+        const processedFilesSection = document.getElementById('processedFilesSection');
+        const processedFilesList = document.getElementById('processedFilesList');
+
+        let selectedFiles = [];
+        let processedBlob = null;
+        let processedFilename = null;
+
+        // Drag & Drop Events
+
+        dragDropBox.addEventListener('click', () => fileInput.click());
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + " B";
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+            return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+        }
+
+        dragDropBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragDropBox.classList.add('dragover');
+        });
+
+        dragDropBox.addEventListener('dragleave', () => {
+            dragDropBox.classList.remove('dragover');
+        });
+
+        dragDropBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragDropBox.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        // File Input Change
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        // Handle Files Function
+        function handleFiles(files) {
+            selectedFiles = Array.from(files).filter(file => file.type === 'application/pdf');
+
+            if (selectedFiles.length === 0) {
+                showToast('Please select PDF files only', 'error');
+                return;
+            }
+
+            if (selectedFiles.length !== Array.from(files).length) {
+                showToast('Non-PDF files were ignored', 'error');
+            }
+
+            displayUploadedFiles();
+            processButton.disabled = false;
+        }
+
+        function displayUploadedFiles() {
+            filesList.innerHTML = '';
+
+            selectedFiles.forEach((file, index) => {
+                const fileSize = (file.size / 1024).toFixed(2);
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <div class="file-info">
+                        <span class="file-icon">📄</span>
+                        <div class="file-details">
+                            <div class="file-name">${file.name}</div>
+                            <div class="file-size">${fileSize} KB</div>
+                        </div>
+                    </div>
+                    <button class="remove-file" onclick="removeFile(${index})" title="Remove file">✕</button>
+                `;
+                filesList.appendChild(fileItem);
+            });
+
+            filesContainer.classList.add('show');
+            dragDropBox.classList.add('has-files');
+
+            if (selectedFiles.length === 0) {
+                filesContainer.classList.remove('show');
+                dragDropBox.classList.remove('has-files');
+                processButton.disabled = true;
+            }
+        }
+
+        // Remove File
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            displayUploadedFiles();
+        }
+
+        processButton.addEventListener('click', async () => {
+            if (selectedFiles.length === 0) {
+                showToast('Please select PDF files', 'error');
+                return;
+            }
+
+            processButton.disabled = true;
+            processButton.classList.add('loading');
+            processButton.innerHTML = '<span class="spinner"></span> Processing...';
+
+            try {
+                const formData = new FormData();
+
+                // Add files
+                selectedFiles.forEach(file => {
+                    formData.append('files', file);
+                });
+
+                // Add filters - mapping to your backend parameter names
+                formData.append('merge', document.getElementById('mergeFiles').checked);
+                formData.append('remove_white', document.getElementById('removeWhiteSpace').checked);
+                formData.append('print_datetime', document.getElementById('printDateTime').checked);
+                formData.append('keep_invoice', document.getElementById('keepInvoice').checked);
+                formData.append('bottom_of_the_table', document.getElementById('multiOrderAtBottom').checked);
+
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const blob = await response.blob();
+
+                processedBlob = blob;
+                const contentType = response.headers.get('content-type');
+                const isZip = contentType && contentType.includes('zip');
+                processedFilename = isZip ? 'processed_pdfs.zip' : 'processed.pdf';
+
+                // Display processed file with download button
+                displayProcessedFile(processedFilename, blob.size);
+                showToast(`Successfully processed! Ready to download.`, 'success');
+
+            } catch (error) {
+                console.error("Error:", error);
+                showToast(`Error: ${error.message}`, 'error');
+            } finally {
+                processButton.disabled = selectedFiles.length === 0;
+                processButton.classList.remove('loading');
+                processButton.innerHTML = 'Process PDF';
+            }
+        });
+
+        // Display Processed File
+        function displayProcessedFile(filename, size) {
+            const fileSize = formatFileSize(size);
+
+            const processedFile = document.createElement('div');
+            processedFile.className = 'processed-file';
+            processedFile.innerHTML = `
+                <div class="processed-file-info">
+                    <div class="processed-file-name">${filename}</div>
+                    <div class="processed-file-stats">
+                        <span>${filename.includes('.zip') ? 'ZIP Archive' : 'PDF'}</span>
+                        <span>${fileSize} MB</span>
+                    </div>
+                </div>
+                <div class="processed-file-actions">
+                    <button class="action-btn" onclick="downloadProcessedFile()" title="Download">
+                        ⬇️ Download
+                    </button>
+                    <button class="action-btn" onclick="openProcessedFile()" title="Open in new tab">
+                        🔗 Open
+                    </button>
+                </div>
+            `;
+            processedFilesList.innerHTML = '';
+            processedFilesList.appendChild(processedFile);
+            processedFilesSection.classList.add('show');
+        }
+
+        function downloadProcessedFile() {
+            if (!processedBlob || !processedFilename) {
+                showToast('No processed file available', 'error');
+                return;
+            }
+            
+            const url = window.URL.createObjectURL(processedBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = processedFilename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            showToast(`Downloaded ${processedFilename}`, 'success');
+        }
+
+        // Open in new tab
+        function openProcessedFile() {
+            if (!processedBlob || !processedFilename) {
+                showToast('No processed file available', 'error');
+                return;
+            }
+            
+            const url = window.URL.createObjectURL(processedBlob);
+            window.open(url, '_blank');
+        }
+
+        // Show Toast
+        function showToast(message, type = 'success') {
+            toast.textContent = message;
+            toast.className = `toast show ${type === 'error' ? 'error' : ''}`;
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 4000);
+        }
+    </script>
+</body>
+</html>
