@@ -292,13 +292,6 @@ def create_pdf_report(order_summary: pd.DataFrame,
 
 
 
-
-
-
-
-
-
-
 COURIER_KEYWORDS = [
     "Xpress bees",
     "Delhivery",
@@ -497,3 +490,54 @@ def sort_doc_by_courier_and_quantity_fixed(doc: fitz.Document, debug: bool = Fal
         out.insert_pdf(doc, from_page=pno, to_page=pno)
 
     return out
+    
+
+
+def extract_orders_from_pdf(doc: fitz.Document, order_ids: list):
+    """
+    Scan pages and collect mapping order_id -> list of page numbers where the order id appears.
+    Returns:
+        orders_pages_map: dict(order_id -> sorted list of page indices)
+        pages_to_remove: sorted list of unique page indices to remove from original
+    """
+    orders_pages_map = {oid: [] for oid in order_ids}
+    pages_to_remove_set = set()
+
+    for pno in range(len(doc)):
+        try:
+            page = doc.load_page(pno)
+            text = page.get_text("text")  # plain text extraction
+        except Exception as e:
+            continue
+
+        for oid in order_ids:
+            if oid and oid in text:
+                # add the page to that order
+                orders_pages_map[oid].append(pno)
+                pages_to_remove_set.add(pno)
+
+    # filter out orders that had no matches
+    orders_pages_map = {oid: sorted(list(pages)) for oid, pages in orders_pages_map.items() if pages}
+    pages_to_remove = sorted(list(pages_to_remove_set))
+    return orders_pages_map, pages_to_remove
+
+def build_doc_from_pages(src_doc: fitz.Document, pages: list):
+    """
+    Create a new fitz.Document with pages in `pages` (in that order).
+    pages are indices from src_doc.
+    """
+    new_doc = fitz.open()
+    for p in pages:
+        new_doc.insert_pdf(src_doc, from_page=p, to_page=p)
+    return new_doc
+
+def build_clean_doc(src_doc: fitz.Document, pages_to_remove: list):
+    """
+    Build a new document with pages not in pages_to_remove.
+    """
+    pages_to_remove_set = set(pages_to_remove)
+    new_doc = fitz.open()
+    for i in range(len(src_doc)):
+        if i not in pages_to_remove_set:
+            new_doc.insert_pdf(src_doc, from_page=i, to_page=i)
+    return new_doc

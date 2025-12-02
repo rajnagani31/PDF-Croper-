@@ -12,8 +12,9 @@ import fitz  # PyMuPDF
 import zipfile
 import datetime
 import base64
-
+from utils import *
 import logging
+from pdf_process import merge_and_order_id,only_separate_order_with_filter
 logger = logging.getLogger("uvicorn.error")
 logger.setLevel(logging.INFO)
 
@@ -36,15 +37,16 @@ async def crop_pdf_editor(
     sort_courier: bool = Form(False),
     remove_white: bool = Form(False),
     print_datetime: bool = Form(False),
-    keep_invoice : bool = Form(False),
+    # keep_invoice : bool = Form(False),
     keep_invoice_no_crop: bool = Form(False),
     bottom_of_the_table:bool=Form(False),
+    separate_order_list: str = Form(""),
 ):
     try:
         filter = {
             "remove_white": remove_white,
             "print_datetime": print_datetime,
-            "keep_invoice": keep_invoice,
+            # "keep_invoice": keep_invoice,
             "bottom_of_the_table":bottom_of_the_table,
             "keep_invoice_no_crop": keep_invoice_no_crop,
             "sort_by_sold": sort_by_sold,
@@ -60,53 +62,36 @@ async def crop_pdf_editor(
             doc = fitz.open(stream=file_bytes, filetype="pdf")
             input_pdf.append({
                 "doc": doc,
-                "bytes": file_bytes
+                "bytes": file_bytes,
+                "filename": getattr(file, "filename", f"input_{len(input_pdf)+1}.pdf")
             })
         logger.info(f"Total PDFs received: {len(input_pdf)}")
 
-        """ If merge is True then merge all PDF and apply process_pdf() on merged PDF and return single PDF""" 
-        if merge:
-            logger.info("Merging PDFs...")
-            merged_doc = fitz.open()
+        
+        if merge and separate_order_list:
+            logger.info("Merging PDFs with separate order IDs and filter...")
+            result = merge_and_order_id(input_pdf, separate_order_list, filter)
+            return result
 
-            for item in input_pdf:
-                temp_doc = fitz.open(stream=item["bytes"], filetype="pdf")
-                merged_doc.insert_pdf(temp_doc)
+        # if separate_order_list:
+        #     logger.info("Processing only separate order IDs with filter...")
+        #     result = only_separate_order_with_filter(input_pdf, separate_order_list, filter)
+        #     return result
+
         
 
-            merged_bytes = BytesIO(merged_doc.tobytes())
-            final_doc = process_pdf(merged_bytes, filter)
-            logger.info("Finished processing merged PDF.")
-
-            return StreamingResponse(
-                BytesIO(final_doc.tobytes()),
-                media_type="application/pdf",
-                headers={"Content-Disposition": "attachment; filename=processed.pdf"}
-            )
         
-        """ If merge is False & and User pass one PDF then apply process_pdf() on each PDF and return zip of all processed PDFs"""
-        if len(input_pdf) == 1:
-            logger.info("Single PDF received, processing...")
-            single_bytes = BytesIO(input_pdf[0]["bytes"])
-
-            final_doc = process_pdf(single_bytes, filter)
-            logger.info("Finished processing single PDF.")
-
-            return StreamingResponse(
-                BytesIO(final_doc.tobytes()),
-                media_type="application/pdf",
-                headers={"Content-Disposition": "attachment; filename=processed.pdf"}
-            )
-
-
         """ If merge is False & and User pass multiple PDFs then apply process_pdf() on each PDF and return zip of all processed PDFs"""
         logger.info(f"Multiple PDFs received: processing each...")
         zip_buffer = BytesIO()
         with zipfile.ZipFile(zip_buffer, "w") as zip_file:
             logger.info("Creating ZIP file for processed PDFs with one by one")
             for idx, pdf in enumerate(input_pdf):
+                print(pdf['filename'])
                 pdf_bytes = BytesIO(pdf["bytes"])
                 processed_doc = process_pdf(pdf_bytes, filter)
+                # processed_doc = only_separate_order_with_filter(pdf, separate_order_list, filter)
+                
                 processed_bytes = processed_doc.tobytes()
                 zip_file.writestr(f"processed_{idx + 1}.pdf", processed_bytes)
 
@@ -117,6 +102,7 @@ async def crop_pdf_editor(
             media_type="application/zip",
             headers={"Content-Disposition": "attachment; filename=processed_pdfs.zip"}
         )
+
 
         # files_data = []
 
