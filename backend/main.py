@@ -33,7 +33,7 @@ async def crop_pdf_editor(
     files: list[UploadFile] = File(...),
     merge: bool = Form(False),
     sort_by_sold: bool = Form(False),
-    dort_courier: bool = Form(False),
+    sort_courier: bool = Form(False),
     remove_white: bool = Form(False),
     print_datetime: bool = Form(False),
     keep_invoice : bool = Form(False),
@@ -48,7 +48,7 @@ async def crop_pdf_editor(
             "bottom_of_the_table":bottom_of_the_table,
             "keep_invoice_no_crop": keep_invoice_no_crop,
             "sort_by_sold": sort_by_sold,
-            "dort_courier": dort_courier,
+            "sort_courier": sort_courier,
         }
         logger.info(f"Filter settings: {filter}")
         logger.info("Reading all PDFs into memory...")

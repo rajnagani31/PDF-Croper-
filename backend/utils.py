@@ -2,14 +2,13 @@ import fitz  # PyMuPDF
 from PIL import Image
 import io
 from pathlib import Path
-from typing import List
 from datetime import datetime
 import pytz
 import fitz  # PyMuPDF
 import pandas as pd
 import re
 from io import BytesIO
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -290,3 +289,211 @@ def create_pdf_report(order_summary: pd.DataFrame,
         return buffer
     else:
         return None
+
+
+
+
+
+
+
+
+
+
+COURIER_KEYWORDS = [
+    "Xpress bees",
+    "Delhivery",
+    "Shadowfax",
+    "valmo/gol",
+    "Valmo",
+    "bluedart",
+]
+
+# compile regexes (longest first)
+_COURIER_REGEXES = [
+    (kw, re.compile(r"\b" + re.escape(kw.lower()) + r"\b", flags=re.IGNORECASE))
+    for kw in sorted(COURIER_KEYWORDS, key=lambda s: -len(s))
+]
+
+# Qty detection regex
+_QTY_PATTERNS = [
+    # old pattern (still useful for some PDFs)
+    re.compile(
+        r"\bQty\b(?:\s*|\s*[:\-]\s*|\s*\n\s*)([0-9]{1,6})\b",
+        flags=re.IGNORECASE
+    ),
+
+    # NEW pattern for table-style PDFs:
+    # Looks for a row where the 3rd column is a number
+    re.compile(
+        r"(?mi)^.+?\s+.+?\s+([0-9]{1,6})\s+.+?$"
+    ),
+]
+
+
+
+# -----------------------------------------------------
+#  COURIER DETECTION
+# -----------------------------------------------------
+def _detect_courier(text: str) -> str:
+    txt = (text or "").lower()
+    for kw, rx in _COURIER_REGEXES:
+        if rx.search(txt):
+            return kw.lower()
+    return "__unknown__"
+
+
+# -----------------------------------------------------
+#  FIXED QUANTITY EXTRACTION
+# -----------------------------------------------------
+def _extract_quantity(text: str) -> Optional[int]:
+    if not text:
+        return None
+
+    lines = text.splitlines()
+    cleaned = []
+    capture = False
+
+    # --- 1) Capture only the Product Details block ---
+    for line in lines:
+        l = line.strip()
+
+        # Start collecting after encountering "Product Details"
+        if "product details" in l.lower():
+            capture = True
+            continue
+
+        # Stop collecting once invoice section begins
+        if capture and (
+            "tax invoice" in l.lower()
+            or "sold by" in l.lower()
+            or "gstin" in l.lower()
+            or "invoice no" in l.lower()
+        ):
+            break
+
+        if capture:
+            cleaned.append(line)
+
+    block = "\n".join(cleaned)
+
+    # --- 2) First, try your original Qty pattern (Qty: 1, Qty 1 etc.) ---
+    qty_keyword_patterns = [
+        re.compile(
+            r"\bQty\b(?:\s*|\s*[:\-]\s*|\s*\n\s*)([0-9]{1,6})\b",
+            flags=re.IGNORECASE,
+        )
+    ]
+
+    for rx in qty_keyword_patterns:
+        m = rx.search(block)
+        if m:
+            return int(m.group(1))
+
+    # --- 3) Table-based Qty extraction ---
+    # Detect header line containing SKU | Size | Qty | Color
+    header_index = None
+    for i, line in enumerate(cleaned):
+        h = line.lower()
+        if "sku" in h and "size" in h and "qty" in h and "color" in h:
+            header_index = i
+            break
+
+    if header_index is not None:
+        # The next non-empty line is the product row
+        for j in range(header_index + 1, len(cleaned)):
+            row = cleaned[j].strip()
+            if not row:
+                continue  # skip blank rows
+
+            parts = row.split()
+            # We expect at least 4 columns: SKU | Size | Qty | Color
+            if len(parts) >= 3:
+                qty_val = parts[2]
+                if qty_val.isdigit():
+                    return int(qty_val)
+            break  # stop after first product row
+
+    # --- 4) Fallback: generic pattern, matches lines like:
+    # "something  something  3  something"
+    fallback_rx = re.compile(r"(?mi)^.+?\s+.+?\s+([0-9]{1,6})\s+.+?$")
+    m = fallback_rx.search(block)
+    if m:
+        try:
+            return int(m.group(1))
+        except:
+            pass
+
+    # Nothing found
+    return None
+
+
+# -----------------------------------------------------
+#  FIXED SORT FUNCTION
+# -----------------------------------------------------
+def sort_doc_by_courier_and_quantity_fixed(doc: fitz.Document, debug: bool = False) -> fitz.Document:
+    # 1. Gather metadata
+    page_meta: List[Tuple[int, str, Optional[int], str]] = []
+    for pno in range(len(doc)):
+        text = doc[pno].get_text("text") or ""
+        courier = _detect_courier(text)
+        qty = _extract_quantity(text)
+        snippet = (text.strip().splitlines()[0] if text.strip() else "")[:140]
+
+        page_meta.append((pno, courier, qty, snippet))
+
+        if debug:
+            print(f"[page {pno}] courier={courier}, qty={qty}, snippet={snippet!r}")
+
+    # 2. Count pages per courier
+    courier_counts: Dict[str, int] = {}
+    for _, courier, _, _ in page_meta:
+        courier_counts[courier] = courier_counts.get(courier, 0) + 1
+
+    # 3. First appearance (tie-breaker)
+    first_appearance: Dict[str, int] = {}
+    for pno, courier, _, _ in page_meta:
+        if courier not in first_appearance:
+            first_appearance[courier] = pno
+
+    # 4. Sort courier groups
+    couriers_sorted = sorted(
+        courier_counts.keys(),
+        key=lambda c: (-courier_counts[c], first_appearance.get(c, 10**9))
+    )
+
+    # Move unknown to last
+    if "__unknown__" in couriers_sorted:
+        couriers_sorted = [c for c in couriers_sorted if c != "__unknown__"] + ["__unknown__"]
+
+    if debug:
+        print("\nCourier Order:")
+        for c in couriers_sorted:
+            print(f"  {c}: count={courier_counts[c]}, first_at={first_appearance[c]}")
+
+    # 5. Sort pages inside each courier group by Qty
+    final_order = []
+    for courier in couriers_sorted:
+        pages = [(pno, qty) for (pno, c, qty, _) in page_meta if c == courier]
+
+        # FIXED SORT: None goes last, quantities ascend
+        pages.sort(
+            key=lambda t: (
+                1 if t[1] is None else 0,
+                t[1] if isinstance(t[1], int) else 999999
+            )
+        )
+
+        if debug:
+            print(f"\nCourier {courier} sorted pages (pno, qty): {pages}")
+
+        final_order.extend([p for p, _ in pages])
+
+    if debug:
+        print("\nFinal page order:", final_order)
+
+    # 6. Build output document
+    out = fitz.open()
+    for pno in final_order:
+        out.insert_pdf(doc, from_page=pno, to_page=pno)
+
+    return out
