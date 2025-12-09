@@ -14,16 +14,22 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
+import io
+import fitz
+from PIL import Image
 
 
-
-def remove_pdf_whitespace(doc: fitz.Document, dpi: int = 150):
+def remove_pdf_whitespace(doc: fitz.Document, dpi: int = 90, jpeg_quality: int = 60):
+    """
+    Crop page → Render cropped region → convert to JPEG → embed → extremely small PDF output.
+    """
     scale = dpi / 72
     out = fitz.open()
 
     for pno in range(len(doc)):
         page = doc[pno]
 
+        # find bounding box
         words = page.get_text("words")
         if words:
             x0 = min(w[0] for w in words)
@@ -33,9 +39,10 @@ def remove_pdf_whitespace(doc: fitz.Document, dpi: int = 150):
             bbox = fitz.Rect(x0, y0, x1, y1)
         else:
             blocks = page.get_text("dict").get("blocks", [])
-            rects = [fitz.Rect(b["bbox"]) for b in blocks]
-            bbox = sum(rects, rects[0]) if rects else page.rect
+            rects = [fitz.Rect(b["bbox"]) for b in blocks if "bbox" in b]
+            bbox = (sum(rects, rects[0]) if rects else page.rect)
 
+        # add margin + clamp to page
         margin = 4
         clip = fitz.Rect(
             bbox.x0 - margin,
@@ -43,21 +50,87 @@ def remove_pdf_whitespace(doc: fitz.Document, dpi: int = 150):
             bbox.x1 + margin,
             bbox.y1 + margin
         )
+        clip &= page.rect
 
+        if clip.width <= 0 or clip.height <= 0:
+            clip = page.rect
+
+        # Render cropped area
         mat = fitz.Matrix(scale, scale)
-        pix = page.get_pixmap(matrix=mat, clip=clip)
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        pix = page.get_pixmap(matrix=mat, clip=clip, alpha=False)
 
+        # Convert pixmap → PIL image
+        mode = "RGB" if pix.n < 4 else "RGBA"
+        img = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
+
+        # Convert to grayscale (optional but reduces size heavily)
+        img = img.convert("L")
+
+        # Save JPEG with compression
         img_bytes = io.BytesIO()
-        img.save(img_bytes, format="PNG")
+        img.save(img_bytes, format="JPEG", quality=jpeg_quality, optimize=True)
         img_bytes.seek(0)
 
+        # Create new PDF page
         new_page = out.new_page(width=clip.width, height=clip.height)
-        new_page.insert_image(fitz.Rect(0, 0, clip.width, clip.height),
-                              stream=img_bytes.read())
+        new_page.insert_image(
+            fitz.Rect(0, 0, clip.width, clip.height),
+            stream=img_bytes.getvalue()
+        )
 
     return out
 
+def sort_courier(original):
+        try:
+            page_meta = []
+            for pno in range(len(original)):
+                text = original[pno].get_text("text") or ""
+                courier = _detect_courier(text) or "__unknown__"
+                qty = _extract_quantity(text)
+                page_meta.append((pno, courier, qty))
+
+            # Count pages per courier
+            courier_counts = {}
+            first_appearance = {}
+
+            for pno, courier, _ in page_meta:
+                courier_counts[courier] = courier_counts.get(courier, 0) + 1
+                if courier not in first_appearance:
+                    first_appearance[courier] = pno
+
+            # Sorting rule
+            couriers_sorted = sorted(
+                courier_counts.keys(),
+                key=lambda c: (-courier_counts[c], first_appearance[c])
+            )
+
+            # Move unknown last
+            if "__unknown__" in couriers_sorted:
+                couriers_sorted.remove("__unknown__")
+                couriers_sorted.append("__unknown__")
+
+            # Build final sorted order
+            final_order = []
+            for courier in couriers_sorted:
+                pages = [(pno, qty) for (pno, c, qty) in page_meta if c == courier]
+                pages.sort(key=lambda t: (
+                    1 if t[1] is None else 0,
+                    t[1] if isinstance(t[1], int) else 0,
+                    t[0]
+                ))
+                final_order.extend([p for p, _ in pages])
+
+            # Create sorted PDF
+            sorted_doc = fitz.open()
+            for pno in final_order:
+                sorted_doc.insert_pdf(original, from_page=pno, to_page=pno)
+
+            working_doc = sorted_doc
+            return working_doc
+
+        except Exception as e:
+            print("sort error:", e)
+            working_doc = original
 
 
 
