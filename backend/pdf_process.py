@@ -1,4 +1,4 @@
-from utils import _detect_courier, _extract_quantity
+from utils import _detect_courier, _extract_quantity ,create_company_summary,create_order_summary ,create_courier_summary
 from utils import *
 import fitz
 from operator import le
@@ -30,7 +30,8 @@ def process_pdf(input_pdf, filter):
         working_doc = original
 
     # Step 2 — APPLY sort_courier (ONLY NEW ADDITION)
-    if filter.get("sort_courier"):
+    if filter['sort_courier']:
+        print(filter.get("sort_courier")    )
         try:
             # collect metadata (page_no, courier, qty)
             page_meta = []
@@ -84,7 +85,6 @@ def process_pdf(input_pdf, filter):
             # on any error, keep working_doc unchanged
             pass
     # Step 3 — insert sorted/unsorted pages into final_doc
-    final_doc.insert_pdf(working_doc)
 
     # Step 4 — print datetime (unchanged)
     if filter['print_datetime']:
@@ -93,7 +93,18 @@ def process_pdf(input_pdf, filter):
     # Step 5 — bottom_of_the_table (unchanged)
     if filter['bottom_of_the_table']:
         extracted_data = extract_meesho_data(original)
+        if extracted_data:
+            order_summary = create_order_summary(extracted_data)
+            courier_summary = create_courier_summary(extracted_data)
+            company_summary = create_company_summary(extracted_data)
+            table_page = create_pdf_report(order_summary, courier_summary, company_summary)
+            
+            final_doc.insert_pdf(table_page)
 
+
+
+
+    final_doc.insert_pdf(working_doc)
     
     return final_doc
 
@@ -115,14 +126,12 @@ def merge_and_order_id(input_pdf, separate_order_list, filter):
         logger.info("Merging PDFs...")
         merged_doc = fitz.open()
 
-        # result = merge_and_order_id(input_pdf)
-        # return result
 
         for item in input_pdf:
             temp_doc = fitz.open(stream=item["bytes"], filetype="pdf")
             merged_doc.insert_pdf(temp_doc)
             
-
+        print('1')
         for file in input_pdf:
             original_doc = fitz.open(stream=file["bytes"], filetype="pdf")
 
@@ -144,9 +153,10 @@ def merge_and_order_id(input_pdf, separate_order_list, filter):
                 if p not in selected_pages:
                     cleaned_doc.insert_pdf(original_doc, from_page=p, to_page=p)
 
+    
         # Step 4 – Apply filters
-        final_selected = process_pdf(BytesIO(selected_doc.tobytes()), filter)
-        final_cleaned = process_pdf(BytesIO(cleaned_doc.tobytes()), filter)
+        final_selected = process_pdf(selected_doc.tobytes(), filter)   # pass bytes directly
+        final_cleaned = process_pdf(cleaned_doc.tobytes(), filter)
 
         # Step 5 – Return ZIP with exactly 2 PDFs
         zip_buffer = BytesIO()
@@ -196,8 +206,8 @@ def only_separate_order_with_filter(input_pdf, separate_order_list, filter):
                     cleaned_doc.insert_pdf(original_doc, from_page=p, to_page=p)
 
         # Step 4 – Apply filters
-        final_selected = process_pdf(BytesIO(selected_doc.tobytes()), filter)
-        final_cleaned = process_pdf(BytesIO(cleaned_doc.tobytes()), filter)
+        final_selected = process_pdf(selected_doc.tobytes(), filter)   # pass bytes directly
+        final_cleaned = process_pdf(cleaned_doc.tobytes(), filter)
 
         # Step 5 – Return ZIP with exactly 2 PDFs
         zip_buffer = BytesIO()

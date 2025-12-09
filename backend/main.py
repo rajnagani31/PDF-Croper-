@@ -49,7 +49,7 @@ async def crop_pdf_editor(
             # "keep_invoice": keep_invoice,
             "bottom_of_the_table":bottom_of_the_table,
             "keep_invoice_no_crop": keep_invoice_no_crop,
-            "sort_by_sold": sort_by_sold,
+            # "sort_by_sold": sort_by_sold,
             "sort_courier": sort_courier,
         }
         logger.info(f"Filter settings: {filter}")
@@ -69,57 +69,46 @@ async def crop_pdf_editor(
 
         
         if merge and separate_order_list:
+            print('yes yesy yes')
+
             logger.info("Merging PDFs with separate order IDs and filter...")
+            logger.info(f"Separate order list: {separate_order_list}")
             result = merge_and_order_id(input_pdf, separate_order_list, filter)
-            return result
+            print('yes yesy yes')
+            return result        
 
-        # if separate_order_list:
-        #     logger.info("Processing only separate order IDs with filter...")
-        #     result = only_separate_order_with_filter(input_pdf, separate_order_list, filter)
-        #     return result
-
-        
-
-        
-        """ If merge is False & and User pass multiple PDFs then apply process_pdf() on each PDF and return zip of all processed PDFs"""
-        logger.info(f"Multiple PDFs received: processing each...")
-        zip_buffer = BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as zip_file:
-            logger.info("Creating ZIP file for processed PDFs with one by one")
-            for idx, pdf in enumerate(input_pdf):
-                print(pdf['filename'])
-                pdf_bytes = BytesIO(pdf["bytes"])
-                processed_doc = process_pdf(pdf_bytes, filter)
-                # processed_doc = only_separate_order_with_filter(pdf, separate_order_list, filter)
+        elif merge:
+            logger.info("Merging all PDFs and applying filters...")
+            merged_doc = fitz.open()
+            for item in input_pdf:
+                temp_doc = fitz.open(stream=item["bytes"], filetype="pdf")
+                merged_doc.insert_pdf(temp_doc)
+            processed_doc = process_pdf(merged_doc.tobytes(), filter)
+            return StreamingResponse(
+                BytesIO(processed_doc.tobytes()),
+                media_type="application/pdf",
+                headers={"Content-Disposition": "attachment; filename=processed_merged.pdf"}
+            )
                 
-                processed_bytes = processed_doc.tobytes()
-                zip_file.writestr(f"processed_{idx + 1}.pdf", processed_bytes)
+        # """ If merge is False & and User pass multiple PDFs then apply process_pdf() on each PDF and return zip of all processed PDFs"""
+        else:
+            return {'message':"Code was NOT work"}
+                # logger.info(f"Multiple PDFs received: processing each...")
+                # zip_buffer = BytesIO()
+                # with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+                #     logger.info("Creating ZIP file for processed PDFs with one by one")
+                #     for idx, pdf in enumerate(input_pdf):
+                #         processed_doc = process_pdf(item["bytes"], filter)
+                #         processed_bytes = processed_doc.tobytes()
+                #         zip_file.writestr(f"processed_{idx + 1}.pdf", processed_bytes)
 
-        zip_buffer.seek(0)
-        logger.info("Finished creating ZIP file for processed PDFs.")
-        return StreamingResponse(
-            zip_buffer,
-            media_type="application/zip",
-            headers={"Content-Disposition": "attachment; filename=processed_pdfs.zip"}
-        )
-
-
-        # files_data = []
-
-        # for idx, pdf_bytes in enumerate(input_pdf, start=1):
-
-        #     processed_doc = process_pdf(pdf_bytes, settings)
-
-        #     pdf_raw_bytes = processed_doc.tobytes()
-        #     encoded = base64.b64encode(pdf_raw_bytes).decode("utf-8")
-
-        #     # FINAL: Add to JSON
-        #     files_data.append({
-        #         "name": f"processed_{idx}.pdf",
-        #         "data": encoded
-        #     })
-
-        # return {"files": files_data}
+                # zip_buffer.seek(0)
+                # logger.info("Finished creating ZIP file for processed PDFs.")
+                # return StreamingResponse(
+                #     zip_buffer,
+                #     media_type="application/zip",
+                #     headers={"Content-Disposition": "attachment; filename=processed_pdfs.zip"}
+                # )
     except Exception as e:
         logger.error(f"Error processing PDFs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
