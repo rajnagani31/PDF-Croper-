@@ -17,8 +17,15 @@ import logging
 from pdf_process import merge_and_order_id,only_separate_order_with_filter
 logger = logging.getLogger("uvicorn.error")
 logger.setLevel(logging.INFO)
+from fastapi.staticfiles import StaticFiles
+import os
 
 app = FastAPI()
+
+# serve the frontend directory at root
+frontend_dir = os.path.join(os.path.dirname("frontend/index.html"), "..", "frontend")  # adjust if path differs
+app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+
 
 app.add_middleware(
     CORSMiddleware,
