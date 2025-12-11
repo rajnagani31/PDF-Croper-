@@ -31,9 +31,17 @@ def process_pdf(input_pdf, filter):
 
     if filter.get("print_datetime"):
         try:
-            pass
-        except:
-            pass
+            print_datetime_exactly_right_of_product_details(
+                doc=working_doc,  # Directly pass the document
+                phrase="Product Details",  # The phrase to search for
+                fontname="Times-Roman",    # Font style
+                fontsize=10.0,             # Font size
+                x_gap=7.0,                # Gap to the right of the phrase
+                y_shift=11.0              # Vertical shift to align with the phrase
+            )
+        except Exception as e:
+            logger.error(f"Error printing datetime: {e}")
+            return False
 
     if filter.get("keep_invoice_no_crop"):
         try:

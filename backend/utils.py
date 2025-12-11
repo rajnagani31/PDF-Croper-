@@ -18,6 +18,55 @@ import io
 import fitz
 from PIL import Image
 
+def get_indian_datetime():
+    # returns formatted date/time with AM/PM
+    return datetime.now().strftime("%d-%m-%Y %I:%M %p")
+
+def _find_phrase_bbox_from_words(page, phrase: str) -> Tuple[float,float,float,float]:
+    """
+    Search page words for the phrase (case-insensitive).
+    Returns bbox (x0,y0,x1,y1) for the first match.
+    Raises ValueError if not found.
+    """
+    words = page.get_text("words")  # list of (x0, y0, x1, y1, "word", block_no, line_no, word_no)
+    if not words:
+        raise ValueError("no words on page")
+
+    # normalize and split phrase into tokens
+    tokens = phrase.strip().split()
+    tokens_lower = [t.lower() for t in tokens]
+    n = len(tokens_lower)
+
+    # build a simple sliding window over words (preserving reading order)
+    word_texts = [w[4].lower() for w in words]
+
+    for i in range(len(word_texts) - n + 1):
+        if word_texts[i:i+n] == tokens_lower:
+            # matched tokens i..i+n-1 -> compute bbox covering them
+            x0 = min(words[j][0] for j in range(i, i+n))
+            y0 = min(words[j][1] for j in range(i, i+n))
+            x1 = max(words[j][2] for j in range(i, i+n))
+            y1 = max(words[j][3] for j in range(i, i+n))
+            return (x0, y0, x1, y1)
+
+    # try looser match: tokens may be split or punctuation; attempt substring match on lines
+    lines = {}
+    for w in words:
+        line_no = (w[6], w[5])  # use (line_no, block_no) to group
+        lines.setdefault(line_no, []).append(w)
+    phrase_norm = "".join(tokens_lower)
+    for line in lines.values():
+        line_text = "".join([w[4].lower() for w in line])
+        if phrase_norm in line_text:
+            # locate first occurrence positions by scanning concatenation
+            # fallback: return bbox of entire line
+            x0 = min(w[0] for w in line)
+            y0 = min(w[1] for w in line)
+            x1 = max(w[2] for w in line)
+            y1 = max(w[3] for w in line)
+            return (x0, y0, x1, y1)
+
+    raise ValueError("phrase not found")
 
 def remove_pdf_whitespace(doc: fitz.Document, dpi: int = 90, jpeg_quality: int = 60):
     """
@@ -79,6 +128,46 @@ def remove_pdf_whitespace(doc: fitz.Document, dpi: int = 90, jpeg_quality: int =
         )
 
     return out
+
+
+
+def print_datetime_exactly_right_of_product_details(
+    doc,  # Now accepts a fitz Document object directly
+    phrase: str = "Product Details",
+    fontname: str = "Times-Roman",
+    fontsize: float = 10.0,
+    x_gap: float = 7.0,
+    y_shift: float = 11.0
+) -> None:
+    """
+    Places date/time immediately to the right of "Product Details" phrase,
+    vertically aligned on the same baseline, for each page in the given doc.
+    """
+    for page in doc:
+        now = get_indian_datetime()  # Assuming you have this function to get current time
+        
+        try:
+            # Find the bounding box of the phrase
+            x0, y0, x1, y1 = _find_phrase_bbox_from_words(page, phrase)
+            
+            # Place timestamp right after the phrase ends
+            tx = x1 + x_gap
+            # Align vertically to the same baseline as the phrase
+            ty = y0 + y_shift
+            
+            try:
+                # Insert the timestamp at the calculated position
+                page.insert_text((tx, ty), now, fontsize=fontsize, fontname=fontname)
+            except Exception as e:
+                logger.error(f"Error inserting text on page: {e}")
+                page.insert_text((tx, ty), now, fontsize=fontsize)  # Fallback without fontname
+
+        except ValueError:
+            # Fallback: phrase not found, place at top-right corner
+            w, h = page.rect.width, page.rect.height
+            page.insert_text((w - 150, 40), now, fontsize=fontsize)
+            logger.warning(f"Phrase '{phrase}' not found on page, placing datetime at top-right.")
+         
 
 def sort_courier(original):
         try:
