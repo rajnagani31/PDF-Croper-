@@ -1,5 +1,5 @@
-from utils import _detect_courier, _extract_quantity ,create_company_summary,create_order_summary ,create_courier_summary
-from utils import *
+from backend.utils import _detect_courier, _extract_quantity ,create_company_summary,create_order_summary ,create_courier_summary
+from backend.utils import *
 import fitz
 from operator import le
 import os
