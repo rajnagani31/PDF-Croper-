@@ -6,7 +6,7 @@ from fastapi import FastAPI , File, UploadFile,Form,Query,HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Annotated, List, Optional
-from pdf_process import process_pdf
+from backend.pdf_process import process_pdf
 from io import BytesIO
 import fitz  # PyMuPDF
 import zipfile
@@ -14,7 +14,7 @@ import datetime
 import base64
 from utils import *
 import logging
-from pdf_process import merge_and_order_id,only_separate_order_with_filter
+from backend.pdf_process import merge_and_order_id
 logger = logging.getLogger("uvicorn.error")
 logger.setLevel(logging.INFO)
 from fastapi.staticfiles import StaticFiles

@@ -159,14 +159,12 @@ def print_datetime_exactly_right_of_product_details(
                 # Insert the timestamp at the calculated position
                 page.insert_text((tx, ty), now, fontsize=fontsize, fontname=fontname)
             except Exception as e:
-                logger.error(f"Error inserting text on page: {e}")
                 page.insert_text((tx, ty), now, fontsize=fontsize)  # Fallback without fontname
 
         except ValueError:
             # Fallback: phrase not found, place at top-right corner
             w, h = page.rect.width, page.rect.height
             page.insert_text((w - 150, 40), now, fontsize=fontsize)
-            logger.warning(f"Phrase '{phrase}' not found on page, placing datetime at top-right.")
          
 
 def sort_courier(original):
