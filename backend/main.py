@@ -22,10 +22,11 @@ import os
 
 app = FastAPI()
 
-# serve the frontend directory at root
-frontend_dir = os.path.join(os.path.dirname("frontend/index.html"), "..", "frontend")  # adjust if path differs
-app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+# Correct path: go up from backend → into frontend
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.join(CURRENT_DIR, "..", "frontend")
 
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
 app.add_middleware(
     CORSMiddleware,
