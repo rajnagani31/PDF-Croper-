@@ -46,10 +46,8 @@ async def crop_pdf_editor(
         filter = {
             "remove_white": remove_white,
             "print_datetime": print_datetime,
-            # "keep_invoice": keep_invoice,
             "bottom_of_the_table":bottom_of_the_table,
             "keep_invoice_no_crop": keep_invoice_no_crop,
-            # "sort_by_sold": sort_by_sold,
             "sort_courier": sort_courier,
         }
         logger.info(f"Filter settings: {filter}")
@@ -63,11 +61,10 @@ async def crop_pdf_editor(
             input_pdf.append({
                 "doc": doc,
                 "bytes": file_bytes,
-                "filename": getattr(file, "filename", f"input_{len(input_pdf)+1}.pdf")
+                "filename": getattr(file, "filename", f"input_{len(input_pdf)+1}.pdf"),
             })
         logger.info(f"Total PDFs received: {len(input_pdf)}")
 
-        
         if merge and separate_order_list:
             logger.info("Merging PDFs with separate order IDs and filter...")
             result = merge_and_order_id(input_pdf, separate_order_list, filter)
@@ -87,7 +84,7 @@ async def crop_pdf_editor(
             return StreamingResponse(
                 BytesIO(processed_doc.tobytes()),
                 media_type="application/pdf",
-                headers={"Content-Disposition": "attachment; filename=processed_merged.pdf"}
+                headers={"Content-Disposition": f"attachment; filename={input_pdf[0]['filename']}_merged.pdf"}
             )
                 
         # """ If merge is False & and User pass multiple PDFs then apply process_pdf() on each PDF and return zip of all processed PDFs"""
@@ -98,14 +95,14 @@ async def crop_pdf_editor(
             for idx, item in enumerate(input_pdf):
                 processed_doc = process_pdf(item["bytes"], filter)
                 processed_bytes = processed_doc.tobytes()
-                zip_file.writestr(f"processed_{idx+1}.pdf", processed_bytes)
+                zip_file.writestr(f"{input_pdf[idx]['filename']}", processed_bytes)
 
         zip_buffer.seek(0)
 
         return StreamingResponse(
             zip_buffer,
             media_type="application/zip",
-            headers={"Content-Disposition": "attachment; filename=processed_files.zip"}
+            headers={"Content-Disposition": f"attachment; filename=processed_files.zip"}
         )
     except Exception as e:
         logger.error(f"Error processing PDFs: {e}")

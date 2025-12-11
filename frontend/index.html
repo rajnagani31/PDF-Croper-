@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Cropper - Process E-commerce Labels</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
     <style>
+        /* General Styles */
         * {
             margin: 0;
             padding: 0;
@@ -179,6 +182,7 @@
             font-size: 14px;
             font-weight: 600;
             color: #333;
+            word-break: break-all; /* Ensure long filenames wrap */
         }
         .file-size {
             font-size: 12px;
@@ -224,11 +228,16 @@
             margin-bottom: 12px;
             border-left: 4px solid #4f8dfd;
         }
+        /* New Style for Extracted Files */
+        .extracted-file {
+            border-left-color: #2ecc71; /* Green for extracted files */
+        }
         .processed-file:last-child {
             margin-bottom: 0;
         }
         .processed-file-info {
             flex: 1;
+            padding-right: 15px;
         }
         .processed-file-name {
             font-size: 14px;
@@ -245,6 +254,7 @@
         .processed-file-actions {
             display: flex;
             gap: 12px;
+            flex-shrink: 0;
         }
         .action-btn {
             background: none;
@@ -259,8 +269,9 @@
             gap: 6px;
             color: #666;
             font-weight: 500;
+            text-decoration: none; /* For download links */
         }
-        .action-btn:hover {
+        .action-btn:hover:not(:disabled) {
             background: #1a73e8;
             color: white;
             border-color: #1a73e8;
@@ -306,7 +317,7 @@
             cursor: pointer;
             user-select: none;
         }
-        /*  Added styles for conditional textarea */
+        /* Added styles for conditional textarea */
         .textarea-wrapper {
             display: none;
             gap: 12px;
@@ -408,6 +419,62 @@
                 opacity: 1;
             }
         }
+
+        /* 2. Processing Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            width: 90%;
+            max-width: 450px;
+        }
+
+        .modal-content h3 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1a73e8;
+            margin-bottom: 15px;
+        }
+
+        .modal-content p {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 25px;
+            font-weight: 500;
+        }
+
+        .modal-icon {
+            font-size: 40px;
+            margin-bottom: 20px;
+            display: inline-block;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
         /* Responsive */
         @media (max-width: 1024px) {
             .main-content {
@@ -428,47 +495,51 @@
             .drag-drop-icon {
                 font-size: 36px;
             }
+            .processed-file {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .processed-file-info {
+                padding-right: 0;
+                margin-bottom: 10px;
+            }
+            .processed-file-actions {
+                width: 100%;
+                justify-content: space-around;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
         <header class="header">
             <div class="logo">PDF Cropper</div>
             <div></div>
         </header>
-        <!-- Title Section -->
         <section class="title-section">
             <h1>Crop E-commerce Label</h1>
             <p>Upload and crop your PDF labels easily.</p>
         </section>
-        <!-- Main Content -->
         <div class="main-content">
-            <!-- Left Column -->
             <div class="upload-section">
-                <!-- Drag & Drop Box with Files Inside -->
                 <div class="drag-drop-box" id="dragDropBox">
-                    <!-- Upload prompt shown when no files selected -->
                     <div class="upload-prompt">
                         <span class="drag-drop-icon">☁️</span>
                         <div class="drag-drop-text">Drag & Drop your files or <span class="browse-link">Browse</span></div>
                         <div class="drag-drop-subtext">Supported: PDF files</div>
                     </div>
-                    <!-- Files container displayed inside drag-drop box when files are selected -->
                     <div class="files-container" id="filesContainer">
                         <div class="files-header">Uploaded Files</div>
                         <div id="filesList"></div>
                     </div>
                 </div>
                 <input type="file" id="fileInput" multiple accept=".pdf" />
-                <!-- Processed Files Section -->
                 <div class="processed-files-section" id="processedFilesSection">
-                    <div class="processed-title">Proceed Files</div>
-                    <div id="processedFilesList"></div>
+                    <div class="processed-title">Processed Files</div>
+                    <div id="processedFilesList"></div> 
+                    <div id="extractedFilesList"></div> 
                 </div>
             </div>
-            <!-- Right Sidebar - Settings -->
             <aside class="sidebar">
                 <div class="sidebar-title">Settings</div>
                 <div class="checkbox-group">
@@ -508,12 +579,10 @@
                         <input type="checkbox" name="multiOrderAtBottom" id="multiOrderAtBottom">
                         <span class="checkbox-label">Multi order at bottom</span>
                     </label>
-                    <!--  Added new checkbox for Separate Review Orders -->
                     <label class="checkbox-wrapper">
                         <input type="checkbox" name="separateReviewOrders" id="separateReviewOrders">
                         <span class="checkbox-label">Separate Review Orders using list</span>
                     </label>
-                    <!--  Added textarea wrapper that shows/hides based on checkbox -->
                     <div class="textarea-wrapper" id="orderIdsWrapper">
                         <textarea 
                             id="orderIdsList"
@@ -526,232 +595,263 @@
             </aside>
         </div>
     </div>
-    <!-- Toast Notification -->
+    <div id="processingModal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="modal-icon">⚠️</span>
+            <h3>Processing Files...</h3>
+            <p>
+                **DO NOT REFRESH OR CLOSE THIS PAGE.**
+                <br>
+                It may take a few minutes depending on the file size.
+            </p>
+            <div class="process-button loading" style="width: auto;">
+                <span class="spinner"></span> Working...
+            </div>
+        </div>
+    </div>
+
     <div class="toast" id="toast"></div>
+
     <script>
-        // Configuration
-        const API_URL = 'http://localhost:8000/crop-pdf';
-        const dragDropBox = document.getElementById('dragDropBox');
-        const fileInput = document.getElementById('fileInput');
-        const filesContainer = document.getElementById('filesContainer');
-        const filesList = document.getElementById('filesList');
-        const processButton = document.getElementById('processButton');
-        const toast = document.getElementById('toast');
-        const processedFilesSection = document.getElementById('processedFilesSection');
-        const processedFilesList = document.getElementById('processedFilesList');
-        
-        //  Added references for new textarea feature
-        const separateReviewOrdersCheckbox = document.getElementById('separateReviewOrders');
-        const orderIdsWrapper = document.getElementById('orderIdsWrapper');
-        const orderIdsList = document.getElementById('orderIdsList');
-        
-        let selectedFiles = [];
-        let processedBlob = null;
-        let processedFilename = null;
-        
-        // Drag & Drop Events
-        dragDropBox.addEventListener('click', () => fileInput.click());
-        
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + " B";
-            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
-            return (bytes / (1024 * 1024)).toFixed(2) + " MB";
-        }
-        
-        dragDropBox.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragDropBox.classList.add('dragover');
-        });
-        
-        dragDropBox.addEventListener('dragleave', () => {
-            dragDropBox.classList.remove('dragover');
-        });
-        
-        dragDropBox.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragDropBox.classList.remove('dragover');
-            handleFiles(e.dataTransfer.files);
-        });
-        
-        // File Input Change
-        fileInput.addEventListener('change', (e) => {
-            handleFiles(e.target.files);
-        });
-        
-        //  Added event listener for textarea toggle
-        separateReviewOrdersCheckbox.addEventListener('change', () => {
-            if (separateReviewOrdersCheckbox.checked) {
-                orderIdsWrapper.classList.add('show');
-            } else {
-                orderIdsWrapper.classList.remove('show');
-            }
-        });
-        
-        // Handle Files Function
-        function handleFiles(files) {
-            selectedFiles = Array.from(files).filter(file => file.type === 'application/pdf');
-            if (selectedFiles.length === 0) {
-                showToast('Please select PDF files only', 'error');
-                return;
-            }
-            if (selectedFiles.length !== Array.from(files).length) {
-                showToast('Non-PDF files were ignored', 'error');
-            }
-            displayUploadedFiles();
-            processButton.disabled = false;
-        }
-        
-        function displayUploadedFiles() {
-            filesList.innerHTML = '';
-            selectedFiles.forEach((file, index) => {
-                const fileSize = (file.size / 1024).toFixed(2);
-                const fileItem = document.createElement('div');
-                fileItem.className = 'file-item';
-                fileItem.innerHTML = `
-                    <div class="file-info">
-                        <span class="file-icon">📄</span>
-                        <div class="file-details">
-                            <div class="file-name">${file.name}</div>
-                            <div class="file-size">${fileSize} KB</div>
-                        </div>
+    // Configuration
+    const API_URL = 'http://localhost:8000/crop-pdf';
+
+    const dragDropBox = document.getElementById('dragDropBox');
+    const fileInput = document.getElementById('fileInput');
+    const filesContainer = document.getElementById('filesContainer');
+    const filesList = document.getElementById('filesList');
+    const processButton = document.getElementById('processButton');
+    const toast = document.getElementById('toast');
+    const processedFilesSection = document.getElementById('processedFilesSection');
+    const processedFilesList = document.getElementById('processedFilesList');
+    const extractedFilesList = document.getElementById('extractedFilesList');
+    const processingModal = document.getElementById('processingModal');
+
+    const separateReviewOrdersCheckbox = document.getElementById('separateReviewOrders');
+    const orderIdsWrapper = document.getElementById('orderIdsWrapper');
+    const orderIdsList = document.getElementById('orderIdsList');
+
+    let selectedFiles = [];
+    let processedBlob = null;
+    let processedFilename = null;
+
+    // Utility: Format file size
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+        return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    }
+
+    // Toast message
+    function showToast(message, type = 'success') {
+        toast.textContent = message;
+        toast.className = `toast show ${type === 'error' ? 'error' : ''}`;
+        setTimeout(() => toast.classList.remove('show'), 4000);
+    }
+
+    // Modal
+    const showModal = () => processingModal.classList.add('show');
+    const hideModal = () => processingModal.classList.remove('show');
+
+    // Download blob
+    function downloadBlob(blob, filename) {
+        if (!blob) return showToast("No file to download", "error");
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    function openProcessedFile() {
+        if (!processedBlob || !processedFilename.endsWith(".pdf"))
+            return showToast("Only PDF can be opened", "error");
+
+        const url = URL.createObjectURL(processedBlob);
+        window.open(url, "_blank");
+    }
+
+    // Drag-drop events
+    dragDropBox.addEventListener("click", () => fileInput.click());
+    dragDropBox.addEventListener("dragover", e => {
+        e.preventDefault();
+        dragDropBox.classList.add("dragover");
+    });
+    dragDropBox.addEventListener("dragleave", () => dragDropBox.classList.remove("dragover"));
+    dragDropBox.addEventListener("drop", e => {
+        e.preventDefault();
+        dragDropBox.classList.remove("dragover");
+        handleFiles(e.dataTransfer.files);
+    });
+
+    fileInput.addEventListener("change", e => handleFiles(e.target.files));
+
+    separateReviewOrdersCheckbox.addEventListener("change", () => {
+        orderIdsWrapper.classList.toggle("show", separateReviewOrdersCheckbox.checked);
+    });
+
+    // Handle file uploads
+    function handleFiles(files) {
+        selectedFiles = [...files].filter(f => f.type === "application/pdf");
+
+        if (selectedFiles.length === 0)
+            return showToast("Only PDF files allowed", "error");
+
+        displayUploadedFiles();
+        processButton.disabled = false;
+        processedFilesSection.classList.remove("show");
+        processedFilesList.innerHTML = "";
+        extractedFilesList.innerHTML = "";
+    }
+
+    function displayUploadedFiles() {
+        filesList.innerHTML = "";
+        selectedFiles.forEach((file, index) => {
+            const item = document.createElement("div");
+            item.className = "file-item";
+            item.innerHTML = `
+                <div class="file-info">
+                    <span class="file-icon">📄</span>
+                    <div class="file-details">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${formatFileSize(file.size)}</div>
                     </div>
-                    <button class="remove-file" onclick="removeFile(${index})" title="Remove file">✕</button>
-                `;
-                filesList.appendChild(fileItem);
-            });
-            filesContainer.classList.add('show');
-            dragDropBox.classList.add('has-files');
-            if (selectedFiles.length === 0) {
-                filesContainer.classList.remove('show');
-                dragDropBox.classList.remove('has-files');
-                processButton.disabled = true;
-            }
-        }
-        
-        // Remove File
-        function removeFile(index) {
-            selectedFiles.splice(index, 1);
-            displayUploadedFiles();
-        }
-        
-        processButton.addEventListener('click', async () => {
-            if (selectedFiles.length === 0) {
-                showToast('Please select PDF files', 'error');
-                return;
-            }
-            processButton.disabled = true;
-            processButton.classList.add('loading');
-            processButton.innerHTML = '<span class="spinner"></span> Processing...';
-            try {
-                const formData = new FormData();
-                // Add files
-                selectedFiles.forEach(file => {
-                    formData.append('files', file);
-                });
-                // Add filters
-                formData.append('merge', document.getElementById('mergeFiles').checked);
-                formData.append('remove_white', document.getElementById('removeWhiteSpace').checked);
-                formData.append('print_datetime', document.getElementById('printDateTime').checked);
-                formData.append('keep_invoice', document.getElementById('keepInvoice').checked);
-                formData.append('bottom_of_the_table', document.getElementById('multiOrderAtBottom').checked);
-                
-                //  Added support for separate review orders filter
-                if (separateReviewOrdersCheckbox.checked) {
-                    const orderIds = orderIdsList.value.trim();
-                    if (orderIds) {
-                        formData.append('separate_review_orders', 'true');
-                        formData.append('order_ids', orderIds);
-                    }
-                }
-                
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    body: formData
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const blob = await response.blob();
-                processedBlob = blob;
-                const contentType = response.headers.get('content-type');
-                const isZip = contentType && contentType.includes('zip');
-                processedFilename = isZip ? 'processed_pdfs.zip' : 'processed.pdf';
-                // Display processed file with download button
-                displayProcessedFile(processedFilename, blob.size);
-                showToast(`Successfully processed! Ready to download.`, 'success');
-            } catch (error) {
-                console.error("Error:", error);
-                showToast(`Error: ${error.message}`, 'error');
-            } finally {
-                processButton.disabled = selectedFiles.length === 0;
-                processButton.classList.remove('loading');
-                processButton.innerHTML = 'Process PDF';
-            }
+                </div>
+                <button class="remove-file" onclick="removeFile(${index})">✕</button>
+            `;
+            filesList.appendChild(item);
         });
-        
-        // Display Processed File
-        function displayProcessedFile(filename, size) {
-            const fileSize = formatFileSize(size);
-            const processedFile = document.createElement('div');
-            processedFile.className = 'processed-file';
-            processedFile.innerHTML = `
+
+        filesContainer.classList.add("show");
+        dragDropBox.classList.add("has-files");
+    }
+
+    function removeFile(index) {
+        selectedFiles.splice(index, 1);
+        displayUploadedFiles();
+        if (selectedFiles.length === 0) processButton.disabled = true;
+    }
+
+    // Process button
+    processButton.addEventListener("click", async () => {
+        if (selectedFiles.length === 0)
+            return showToast("Please upload PDF files first", "error");
+
+        showModal();
+        processButton.disabled = true;
+        processButton.innerHTML = `<span class="spinner"></span> Processing...`;
+
+        try {
+            const formData = new FormData();
+            selectedFiles.forEach(f => formData.append("files", f));
+
+            formData.append("merge", document.getElementById("mergeFiles").checked);
+            formData.append("remove_white", document.getElementById("removeWhiteSpace").checked);
+            formData.append("print_datetime", document.getElementById("printDateTime").checked);
+            formData.append("keep_invoice_no_crop", document.getElementById("keepInvoiceNoCrop").checked);
+            formData.append("sort_courier", document.getElementById("sortCourierWise").checked);
+            formData.append("bottom_of_the_table", document.getElementById("multiOrderAtBottom").checked);
+
+            if (separateReviewOrdersCheckbox.checked) {
+                formData.append("separate_order_list", orderIdsList.value.trim());
+            }
+
+            const res = await fetch(API_URL, { method: "POST", body: formData });
+
+            if (!res.ok)
+                throw new Error(await res.text());
+
+            const blob = await res.blob();
+            processedBlob = blob;
+
+            const type = res.headers.get("content-type");
+            const filename =
+                res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ||
+                (type.includes("zip") ? "processed.zip" : "processed.pdf");
+
+            processedFilename = filename;
+
+            processedFilesList.innerHTML = "";
+            extractedFilesList.innerHTML = "";
+
+            if (type.includes("zip")) {
+                displayProcessedFile(filename, blob.size);
+                await extractAndDisplayZip(blob);
+            } else {
+                displayProcessedFile(filename, blob.size);
+            }
+
+            processedFilesSection.classList.add("show");
+            showToast("Processing Complete!");
+
+        } catch (err) {
+            console.error(err);
+            showToast("Error: " + err.message, "error");
+        }
+
+        hideModal();
+        processButton.disabled = false;
+        processButton.innerHTML = "Process PDF";
+    });
+
+    // Display processed main file (PDF or ZIP)
+    function displayProcessedFile(filename, size) {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = "processed-file";
+        fileDiv.innerHTML = `
+            <div class="processed-file-info">
+                <div class="processed-file-name">${filename}</div>
+                <div class="processed-file-stats">
+                    <span>${filename.endsWith(".pdf") ? "PDF" : "File"}</span>
+                    <span>${formatFileSize(size)}</span>
+                </div>
+            </div>
+            <div class="processed-file-actions">
+                <button class="action-btn" onclick="downloadBlob(processedBlob, processedFilename)">⬇️ Download</button>
+                ${filename.endsWith(".pdf") ? `<button class="action-btn" onclick="openProcessedFile()">🔗 Open</button>` : ""}
+            </div>
+        `;
+        processedFilesList.appendChild(fileDiv);
+    }
+
+    // Extract ZIP contents
+    async function extractAndDisplayZip(zipBlob) {
+        const zip = await JSZip.loadAsync(zipBlob);
+
+        extractedFilesList.innerHTML = `<div class="files-header">Extracted Files</div>`;
+
+        for (const filename of Object.keys(zip.files)) {
+            const file = zip.files[filename];
+            if (file.dir) continue;
+
+            const contentBlob = await file.async("blob");
+
+            const fileDiv = document.createElement("div");
+            fileDiv.className = "processed-file extracted-file";
+            fileDiv.innerHTML = `
                 <div class="processed-file-info">
                     <div class="processed-file-name">${filename}</div>
                     <div class="processed-file-stats">
-                        <span>${filename.includes('.zip') ? 'ZIP Archive' : 'PDF'}</span>
-                        <span>${fileSize} MB</span>
+                        <span>${filename.endsWith(".pdf") ? "PDF" : "File"}</span>
+                        <span>${formatFileSize(contentBlob.size)}</span>
                     </div>
                 </div>
                 <div class="processed-file-actions">
-                    <button class="action-btn" onclick="downloadProcessedFile()" title="Download">
-                        ⬇️ Download
-                    </button>
-                    <button class="action-btn" onclick="openProcessedFile()" title="Open in new tab">
-                        🔗 Open
-                    </button>
+                    <button class="action-btn">⬇️ Download</button>
                 </div>
             `;
-            processedFilesList.innerHTML = '';
-            processedFilesList.appendChild(processedFile);
-            processedFilesSection.classList.add('show');
+
+            fileDiv.querySelector("button").addEventListener("click", () => {
+                downloadBlob(contentBlob, filename);
+            });
+
+            extractedFilesList.appendChild(fileDiv);
         }
-        
-        function downloadProcessedFile() {
-            if (!processedBlob || !processedFilename) {
-                showToast('No processed file available', 'error');
-                return;
-            }
-            const url = window.URL.createObjectURL(processedBlob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = processedFilename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            showToast(`Downloaded ${processedFilename}`, 'success');
-        }
-        
-        // Open in new tab
-        function openProcessedFile() {
-            if (!processedBlob || !processedFilename) {
-                showToast('No processed file available', 'error');
-                return;
-            }
-            const url = window.URL.createObjectURL(processedBlob);
-            window.open(url, '_blank');
-        }
-        
-        // Show Toast
-        function showToast(message, type = 'success') {
-            toast.textContent = message;
-            toast.className = `toast show ${type === 'error' ? 'error' : ''}`;
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 4000);
-        }
-    </script>
+    }
+</script>
+
 </body>
 </html>

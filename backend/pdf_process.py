@@ -121,11 +121,11 @@ def merge_and_order_id(input_pdf, separate_order_list, filter):
         # Step 4 – Apply filters
         final_selected = process_pdf(selected_doc.tobytes(), filter)   # pass bytes directly
         final_cleaned = process_pdf(cleaned_doc.tobytes(), filter)
-
+        print('data',input_pdf[0]['filename'])
         # Step 5 – Return ZIP with exactly 2 PDFs
         zip_buffer = BytesIO()
         with zipfile.ZipFile(zip_buffer, "w") as zip_file:
-            zip_file.writestr("selected_orders.pdf", final_selected.tobytes())
+            zip_file.writestr(f"{input_pdf[0]['filename']}_all_merged.pdf", final_selected.tobytes())
             zip_file.writestr("cleaned_original.pdf", final_cleaned.tobytes())
 
         zip_buffer.seek(0)
