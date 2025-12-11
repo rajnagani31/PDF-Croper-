@@ -22,11 +22,7 @@ import os
 
 app = FastAPI()
 
-# Correct path: go up from backend → into frontend
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-FRONTEND_DIR = os.path.join(CURRENT_DIR, "..", "frontend")
 
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
 app.add_middleware(
     CORSMiddleware,
@@ -115,3 +111,10 @@ async def crop_pdf_editor(
     except Exception as e:
         logger.error(f"Error processing PDFs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.join(CURRENT_DIR, "..", "frontend")
+
+# Serve frontend at "/"
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
