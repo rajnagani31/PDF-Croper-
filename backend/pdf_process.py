@@ -12,7 +12,7 @@ import fitz  # PyMuPDF
 import zipfile
 import datetime
 import base64
-from utils import *
+from backend.utils import *
 import logging
 logger = logging.getLogger("uvicorn.error")
 logger.setLevel(logging.INFO)
